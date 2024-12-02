@@ -1,6 +1,9 @@
 using System;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
+using System.IO;
+using System.Net;
 using System.Text;
 
 namespace NHibernate.AdoNet.Util
@@ -8,7 +11,7 @@ namespace NHibernate.AdoNet.Util
 	/// <summary> Centralize logging handling for SQL statements. </summary>
 	public class SqlStatementLogger
 	{
-		private static readonly INHibernateLogger Logger = NHibernateLogger.For("NHibernate.SQL");
+		private static INHibernateLogger Logger => NHibernateLogger.For("NHibernate.SQL");
 
 		/// <summary> Constructs a new SqlStatementLogger instance.</summary>
 		public SqlStatementLogger() : this(false, false)
@@ -39,6 +42,7 @@ namespace NHibernate.AdoNet.Util
 		/// <param name="style">The requested formatting style. </param>
 		public virtual void LogCommand(string message, DbCommand command, FormatStyle style)
 		{
+			//File.AppendAllLines(@"c:\logs\log-nh.log", new []{$"LogCommand, IsDebugEnabled={Logger.IsDebugEnabled()}, LogToStdOut={LogToStdout}, CommandText={command.CommandText}\r\n from {new System.Diagnostics.StackTrace(true)}"});
 			if (!Logger.IsDebugEnabled() && !LogToStdout || string.IsNullOrEmpty(command.CommandText))
 			{
 				return;
@@ -55,7 +59,21 @@ namespace NHibernate.AdoNet.Util
 			{
 				logMessage = message + statement;
 			}
+			
+			try
+			{
+				File.AppendAllLines(
+					@"c:\logs\log-nh.log",
+					new[]
+					{
+						$"Logger is a {Logger.GetType().FullName}, Logging {logMessage}, from {new StackTrace(true)}"
+					});
+			}
+			catch (Exception)
+			{
+			}
 			Logger.Debug(logMessage);
+
 			if (LogToStdout)
 			{
 				Console.Out.WriteLine("NHibernate: " + statement);
@@ -168,6 +186,8 @@ namespace NHibernate.AdoNet.Util
 		public void LogBatchCommand(string batchCommand)
 		{
 			Logger.Debug(batchCommand);
+			//File.AppendAllLines(@"c:\logs\log-nh.log", new []{$"LogBatcjCommand, LogToStdOut={LogToStdout}, batchCommand={batchCommand} \r\n from {new System.Diagnostics.StackTrace(true)}"});
+
 			if (LogToStdout)
 			{
 				Console.Out.WriteLine("NHibernate: " + batchCommand);
