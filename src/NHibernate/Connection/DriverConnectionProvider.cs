@@ -39,10 +39,10 @@ namespace NHibernate.Connection
 				conn.ConnectionString = connectionString;
 				conn.Open();
 			}
-			catch (Exception)
+			catch (Exception e)
 			{
 				conn.Dispose();
-				throw;
+				throw new Exception($"NHibernate encountered {e.GetType().Name} connecting to {connectionString}");
 			}
 			
 			return conn;

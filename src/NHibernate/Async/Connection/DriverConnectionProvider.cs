@@ -39,10 +39,10 @@ namespace NHibernate.Connection
 				await (conn.OpenAsync(cancellationToken)).ConfigureAwait(false);
 			}
 			catch (OperationCanceledException) { throw; }
-			catch (Exception)
+			catch (Exception e)
 			{
 				conn.Dispose();
-				throw;
+				throw new Exception($"NHibernate encountered {e.GetType().Name} connecting to {connectionString}", e);
 			}
 			
 			return conn;
