@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -86,8 +87,37 @@ namespace NHibernate.AdoNet.Util
 			return string.Equals("null", dateParamValue, StringComparison.InvariantCultureIgnoreCase) ?
 				dateParamValue : $"cast('{dateParamValue}' as datetime)";
 		}
-		
-		private static string CommentedCallStack(StackTrace stackTrace) => $"\r\n\r\n/*{Regex.Replace(stackTrace.ToString(), @"^\s*at\s+NLog\..*$", "", RegexOptions.Multiline).Trim()}\r\n*/";
+
+		private static readonly Regex stackFrameOfInterest = new(@"^\s+at Payroll", RegexOptions.Compiled);
+		private static string CommentedCallStack(StackTrace stackTrace)
+		{
+			var stringBuilder = new StringBuilder();
+			using (var stringWriter = new StringWriter(stringBuilder))
+			{
+
+				bool uninterestingFramesSkipped = false; // only write one set of dots per load of uninteresting frames
+				foreach (var stackFrame in stackTrace.GetFrames())
+				{
+					var stackFrameString = stackFrame.ToString();
+					if (stackFrameOfInterest.IsMatch(stackFrameString))
+					{
+						if (uninterestingFramesSkipped)
+						{
+							stringWriter.WriteLine("...");
+						}
+
+						stringWriter.WriteLine(stackFrameString);
+						uninterestingFramesSkipped = false;
+					}
+					else
+					{
+						uninterestingFramesSkipped = true;
+					}
+				}
+			}
+
+			return stringBuilder.ToString();
+		}
 
 		private static void LogSql(string message)
 		{
@@ -96,11 +126,12 @@ namespace NHibernate.AdoNet.Util
 			var topFrameOfInterest = stackTrace.GetFrames().FirstOrDefault(
 				sf =>
 				{
-					var declaringType = sf.GetMethod().DeclaringType;
-					return declaringType.Namespace.StartsWith("Payroll") && typeMatch1.IsMatch(declaringType.Name);
+					var declaringType = sf.GetMethod()?.DeclaringType;
+					return declaringType != null && declaringType.Name != null && declaringType.Namespace != null &&
+					       declaringType.Namespace.StartsWith("Payroll") && typeMatch1.IsMatch(declaringType.Name);
 				})
 			               ?? // but if not, anything in Payroll
-			    stackTrace.GetFrames().FirstOrDefault(sf => sf.GetMethod().DeclaringType.Namespace.StartsWith("Payroll"));
+			    stackTrace.GetFrames().FirstOrDefault(sf => sf.GetMethod()?.DeclaringType?.Namespace?.StartsWith("Payroll") ?? false);
 
 			if (topFrameOfInterest != null) // don't log if it's not even in Payroll
 			{
