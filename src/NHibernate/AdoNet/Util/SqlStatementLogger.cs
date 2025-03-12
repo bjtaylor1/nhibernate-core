@@ -94,19 +94,19 @@ namespace NHibernate.AdoNet.Util
 			var stringBuilder = new StringBuilder();
 			using (var stringWriter = new StringWriter(stringBuilder))
 			{
-
+				stringWriter.WriteLine();
+				stringWriter.WriteLine("/*");
 				bool uninterestingFramesSkipped = false; // only write one set of dots per load of uninteresting frames
-				foreach (var stackFrame in stackTrace.GetFrames())
+				foreach (var stackTraceLine in stackTrace.ToString().Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim('\r')))
 				{
-					var stackFrameString = stackFrame.ToString();
-					if (stackFrameOfInterest.IsMatch(stackFrameString))
+					if (stackFrameOfInterest.IsMatch(stackTraceLine))
 					{
 						if (uninterestingFramesSkipped)
 						{
 							stringWriter.WriteLine("...");
 						}
 
-						stringWriter.WriteLine(stackFrameString);
+						stringWriter.WriteLine(stackTraceLine);
 						uninterestingFramesSkipped = false;
 					}
 					else
@@ -114,6 +114,7 @@ namespace NHibernate.AdoNet.Util
 						uninterestingFramesSkipped = true;
 					}
 				}
+				stringWriter.WriteLine("*/");
 			}
 
 			return stringBuilder.ToString();
@@ -135,9 +136,9 @@ namespace NHibernate.AdoNet.Util
 
 			if (topFrameOfInterest != null) // don't log if it's not even in Payroll
 			{
-				var loggerName = $"BT.Debug.NHSQL.{topFrameOfInterest.GetMethod().DeclaringType.FullName}";
+				var loggerName = "BT.Debug.NHibernate.SQL";
 				var formattedMessage = ReplaceParameters(message) + CommentedCallStack(stackTrace);
-				NLog.LogManager.GetLogger(loggerName).Info(formattedMessage);
+				NLog.LogManager.GetLogger(loggerName).Info($"{topFrameOfInterest.GetMethod().DeclaringType.FullName}\r\n{formattedMessage}");
 			}
 		}
 
