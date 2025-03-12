@@ -41,6 +41,7 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
     <PackageReference Include="Remotion.Linq" Version="[2.2.0, 3.0)" />
     <PackageReference Include="Remotion.Linq.EagerFetching" Version="[2.2.0, 3.0)" />
+    <PackageReference Include="NLog" Version="5.2.2"/>
   </ItemGroup>
 
   <ItemGroup Condition="$(NhNetFx)">

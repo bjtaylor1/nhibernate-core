@@ -5,3 +5,4 @@ gitreleasemanager/
 obj/
 microsoft.*
 netstandard.*
+nant/bin/

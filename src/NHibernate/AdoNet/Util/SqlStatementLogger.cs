@@ -1,7 +1,13 @@
 using System;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
+
+// ReSharper disable PossibleNullReferenceException
+// ReSharper disable AssignNullToNotNullAttribute
 
 namespace NHibernate.AdoNet.Util
 {
@@ -32,6 +38,77 @@ namespace NHibernate.AdoNet.Util
 		{
 			get { return Logger.IsDebugEnabled(); }
 		}
+		
+		private static readonly Regex typeMatch1 = new(@"repository$|command$|handler$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+		
+		private static readonly Regex parametersRegex = new Regex(@"(?<ref>@p\d+)\s*\=\s*(?<value>.+?) \s* \[Type\:\s*(?<type>[^\(]+?) \s \((?<size>[^\)\]]+)\)\]", RegexOptions.IgnorePatternWhitespace | RegexOptions.Compiled);
+
+		private static SqlParameterInfo[] ParseParameters(string message)
+		{
+			//e.g.
+			//select SCOPE_IDENTITY();@p0 = 'WorkZone' [Type: String (4000)], @p1 = 06/04/2021 14:08:14 [Type: DateTime (0)], @p2 = NULL [Type: String (4000)], @p3 = NULL [Type: String (4000)], @p4 = False [Type: Boolean (0)], @p5 = False [Type: Boolean (0)], @p6 = NULL [Type: String (4000)], @p7 = True [Type: Boolean (0)], @p8 = False [Type: Boolean (0)], @p9 = False [Type: Boolean (0)], @p10 = NULL [Type: Int32 (0)], @p11 = NULL [Type: Int32 (0)], @p12 = 1 [Type: Int32 (0)], @p13 = NULL [Type: Int32 (0)], @p14 = False [Type: Boolean (0)], @p15 = NULL [Type: Int32 (0)], @p16 = NULL [Type: Int32 (0)], @p17 = 216697 [Type: Int32 (0)] 
+
+			var matches = parametersRegex.Matches(message);
+			return matches.Cast<Match>().Select(m => new SqlParameterInfo
+			{
+				Ref = m.Groups["ref"].Value,
+				Size = m.Groups["size"].Value,
+				Type = m.Groups["type"].Value,
+				Value = m.Groups["value"].Value
+			}).ToArray();
+		}
+		
+		private static string ReplaceParameters(string msg)
+		{
+			var parameters = ParseParameters(msg);
+			var firstParamMatch = parametersRegex.Match(msg);
+			var sqlWithoutParameters = firstParamMatch.Success
+				? msg.Substring(0, firstParamMatch.Index)
+				: msg; // everything after the first param isn't SQL
+			var sqlWithParametersSubstituted = parameters.Aggregate(sqlWithoutParameters, (s, p) => Regex.Replace(s, @$"{Regex.Escape(p.Ref)}\b", TranslateValue(p))); // doesn't need to match word boundary at start, as starts with @
+			var sqlMultiLine = Regex.Replace(sqlWithParametersSubstituted, @"\b(?:SELECT|FROM|WHERE|INNER|JOIN|GROUP)\b", "\r\n$0");
+			return sqlMultiLine;
+		}
+		
+		private static string TranslateValue(SqlParameterInfo parameterInfo)
+		{
+			switch(parameterInfo.Type)
+			{
+				case "Boolean": return "True".Equals(parameterInfo.Value, System.StringComparison.OrdinalIgnoreCase) ? "1" : "0";
+				case "DateTime": case "DateTime2": return WriteDateValue(parameterInfo.Value);
+				default: return parameterInfo.Value; //strings already have single quotes round them
+			}
+		}
+
+		private static string WriteDateValue(string dateParamValue)
+		{
+			if (DateTime.TryParse(dateParamValue, out var date)) return $"'{date:yyyy-MM-dd HH:mm:ss.fff}'";
+			return string.Equals("null", dateParamValue, StringComparison.InvariantCultureIgnoreCase) ?
+				dateParamValue : $"cast('{dateParamValue}' as datetime)";
+		}
+		
+		private static string CommentedCallStack(StackTrace stackTrace) => $"\r\n\r\n/*{Regex.Replace(stackTrace.ToString(), @"^\s*at\s+NLog\..*$", "", RegexOptions.Multiline).Trim()}\r\n*/";
+
+		private static void LogSql(string message)
+		{
+			var stackTrace = new StackTrace(true);
+			// ideally, a command, handler, or repository
+			var topFrameOfInterest = stackTrace.GetFrames().FirstOrDefault(
+				sf =>
+				{
+					var declaringType = sf.GetMethod().DeclaringType;
+					return declaringType.Namespace.StartsWith("Payroll") && typeMatch1.IsMatch(declaringType.Name);
+				})
+			               ?? // but if not, anything in Payroll
+			    stackTrace.GetFrames().FirstOrDefault(sf => sf.GetMethod().DeclaringType.Namespace.StartsWith("Payroll"));
+
+			if (topFrameOfInterest != null) // don't log if it's not even in Payroll
+			{
+				var loggerName = $"BT.Debug.NHSQL.{topFrameOfInterest.GetMethod().DeclaringType.FullName}";
+				var formattedMessage = ReplaceParameters(message) + CommentedCallStack(stackTrace);
+				NLog.LogManager.GetLogger(loggerName).Info(formattedMessage);
+			}
+		}
 
 		/// <summary> Log a DbCommand. </summary>
 		/// <param name="message">Title</param>
@@ -55,6 +132,7 @@ namespace NHibernate.AdoNet.Util
 			{
 				logMessage = message + statement;
 			}
+			LogSql(logMessage);
 			Logger.Debug(logMessage);
 			if (LogToStdout)
 			{
