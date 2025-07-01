@@ -120,7 +120,7 @@ namespace NHibernate.AdoNet.Util
 			return stringBuilder.ToString();
 		}
 
-		private static void LogSql(string message)
+		private static void LogSql(string message, bool writeDebugOutputToFile)
 		{
 			var stackTrace = new StackTrace(true);
 			// ideally, a command, handler, or repository
@@ -139,16 +139,40 @@ namespace NHibernate.AdoNet.Util
 				var loggerName = "BT.Debug.NHibernate.SQL";
 				var formattedMessage = ReplaceParameters(message) + CommentedCallStack(stackTrace);
 				NLog.LogManager.GetLogger(loggerName).Info($"{topFrameOfInterest.GetMethod().DeclaringType.FullName}\r\n{formattedMessage}");
+
+				if (writeDebugOutputToFile)
+				{
+					try
+					{
+						var fileName = $"{topFrameOfInterest.GetMethod().DeclaringType.Name}.{topFrameOfInterest.GetMethod().Name}.log";
+						File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName), formattedMessage);
+						File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName), "/* ========================================================= */");
+					}
+					catch (Exception e)
+					{
+						try
+						{
+							File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NHibernate.log"), e.ToString());
+						}
+						catch (Exception)
+						{
+							// ignored
+						}
+					}
+				}
 			}
 		}
 
+		private const string logSqlToFileMarker = ".nhlogsqltofile";
 		/// <summary> Log a DbCommand. </summary>
 		/// <param name="message">Title</param>
 		/// <param name="command">The SQL statement. </param>
 		/// <param name="style">The requested formatting style. </param>
 		public virtual void LogCommand(string message, DbCommand command, FormatStyle style)
 		{
-			if (!Logger.IsDebugEnabled() && !LogToStdout || string.IsNullOrEmpty(command.CommandText))
+			var writeDebugOutputToFile = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, logSqlToFileMarker));
+			
+			if ((!Logger.IsDebugEnabled() && !LogToStdout || string.IsNullOrEmpty(command.CommandText)) && !writeDebugOutputToFile)
 			{
 				return;
 			}
@@ -164,7 +188,7 @@ namespace NHibernate.AdoNet.Util
 			{
 				logMessage = message + statement;
 			}
-			LogSql(logMessage);
+			LogSql(logMessage, writeDebugOutputToFile);
 			Logger.Debug(logMessage);
 			if (LogToStdout)
 			{
