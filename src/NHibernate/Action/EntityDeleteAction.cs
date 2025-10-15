@@ -15,6 +15,7 @@ namespace NHibernate.Action
 		private readonly object version;
 		private readonly bool isCascadeDeleteEnabled;
 		private ISoftLock sLock;
+		private readonly string creationCallStack;
 
 		public EntityDeleteAction(object id, object[] state, object version, object instance, IEntityPersister persister, bool isCascadeDeleteEnabled, ISessionImplementor session)
 			: base(session, id, instance, persister)
@@ -22,6 +23,7 @@ namespace NHibernate.Action
 			this.state = state;
 			this.version = version;
 			this.isCascadeDeleteEnabled = isCascadeDeleteEnabled;
+			creationCallStack = new StackTrace(true).ToString();
 		}
 
 		protected internal override bool HasPostCommitEventListeners
@@ -67,7 +69,14 @@ namespace NHibernate.Action
 
 			if (!isCascadeDeleteEnabled && !veto)
 			{
-				persister.Delete(id, tmpVersion, instance, session);
+				try
+				{
+					persister.Delete(id, tmpVersion, instance, session);
+				}
+				catch(Exception e)
+				{
+					throw new Exception($"EntityDeleteAction failed to delete {instance} which was created at:\r\n${creationCallStack}", e);
+				}
 			}
 
 			//postDelete:

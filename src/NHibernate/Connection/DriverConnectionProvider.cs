@@ -1,5 +1,6 @@
 using System;
 using System.Data.Common;
+using System.Text.RegularExpressions;
 
 namespace NHibernate.Connection
 {
@@ -42,10 +43,27 @@ namespace NHibernate.Connection
 			catch (Exception e)
 			{
 				conn.Dispose();
-				throw new Exception($"NHibernate encountered {e.GetType().Name} connecting to {connectionString}");
+				throw new Exception($"NHibernate encountered {e.GetType().Name} connecting to {AnonymizeConnectionString(connectionString)}");
 			}
 			
 			return conn;
+		}
+
+		/// <summary>
+		/// Anonymizes sensitive information (like passwords) in a connection string for logging purposes.
+		/// </summary>
+		/// <param name="connectionString">The connection string to anonymize.</param>
+		/// <returns>The connection string with sensitive values replaced with ***.</returns>
+		private static string AnonymizeConnectionString(string connectionString)
+		{
+			if (string.IsNullOrEmpty(connectionString))
+				return connectionString;
+
+			// Pattern to match common password parameter names (case-insensitive)
+			// Matches: password=value, pwd=value, pass=value, etc.
+			var passwordPattern = @"(password|pwd|pass)\s*=\s*[^;]*";
+			
+			return Regex.Replace(connectionString, passwordPattern, "$1=***", RegexOptions.IgnoreCase);
 		}
 	}
 }
