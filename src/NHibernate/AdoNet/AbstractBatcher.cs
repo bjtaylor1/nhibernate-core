@@ -218,6 +218,10 @@ namespace NHibernate.AdoNet
 				duration = Stopwatch.StartNew();
 			try
 			{
+				if(cmd.CommandTimeout < 300) 
+				{
+					cmd.CommandTimeout = 300; //5 mins (put in cos DeleteBusinesses was taking over a minute, but succeeding)
+				}
 				return cmd.ExecuteNonQuery();
 			}
 			catch (Exception e)
