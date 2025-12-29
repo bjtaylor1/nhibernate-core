@@ -75,7 +75,9 @@ namespace NHibernate.Action
 				}
 				catch(Exception e)
 				{
-					throw new Exception($"EntityDeleteAction failed to delete {instance} which was created at:\r\n${creationCallStack}", e);
+					var ex = new Exception($"EntityDeleteAction failed to delete {instance} which was created at:\r\n${creationCallStack}", e);
+					NLog.LogManager.GetLogger($"BT.Debug.{GetType().Name}").Error(ex);
+					throw ex;
 				}
 			}
 
